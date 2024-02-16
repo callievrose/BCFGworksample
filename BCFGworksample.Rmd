@@ -1,0 +1,111 @@
+---
+title: "BCFG work sample"
+output: html_document
+date: '2024-02-16'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(knitr)
+library(kableExtra)
+```
+
+
+```{r}
+patient_data <- read.csv("Patient_Vaccination_Status.csv")
+
+store_data <- read.csv("Store_Data.csv")
+
+#Checking what values are present for each control variable
+table(patient_data$age)
+table(patient_data$race)
+table(patient_data$ethnicity)
+table(patient_data$gender)
+
+#Creating indicators for the control variables and conditions in the patient data set
+patient_data <- patient_data %>%
+    mutate(african_american = ifelse(race == "African American", 1, 0)) %>%
+    mutate(asian = ifelse(race == "Asian", 1, 0)) %>%
+    mutate(other_race = ifelse(race == "" | race == "Other" | race == "Unknown", 1, 0)) %>%
+    mutate(hispanic = ifelse(ethnicity == "Hispanic", 1, 0)) %>%
+    mutate(male = ifelse(gender == 'Male', 1, 0)) %>%
+    mutate(other_gender = ifelse(gender == "" | gender == "Unknown", 1, 0)) %>%
+    mutate(condition_2 = ifelse(condition == 2, 1, 0)) %>%
+    mutate(condition_3 = ifelse(condition == 3, 1, 0)) %>%
+    mutate(condition_4 = ifelse(condition == 4, 1, 0)) %>%
+    mutate(condition_5 = ifelse(condition == 5, 1, 0)) %>%
+    mutate(condition_6 = ifelse(condition == 6, 1, 0)) %>%
+    mutate(condition_7 = ifelse(condition == 7, 1, 0)) %>%
+    mutate(condition_8 = ifelse(condition == 8, 1, 0))
+    
+
+
+table(patient_data$condition)
+
+#Merging the patient and store data sets
+merged_data <- merge(patient_data, store_data, by.x = "store_id", by.y = "Store_ID")
+
+#Creating indicator variable for pharmacy region control
+
+table(merged_data$Region)
+
+merged_data <- merged_data %>%
+    mutate(midwest = ifelse(Region == "Midwest", 1, 0)) %>%
+    mutate(southeast = ifelse(Region == "Southeast", 1, 0)) %>%
+    mutate(west = ifelse(Region == "West", 1, 0)) %>%
+    mutate(southwest = ifelse(Region == "Southwest", 1, 0))
+
+#Creating data set with only the relevant columns
+#regression_data <- merged_data %>%
+ #   subset(select = c())
+    
+```
+```{r}
+#Running the regression!
+model <- lm(vaccination_status ~ age + african_american + asian + other_race + hispanic + male + other_gender + midwest + southeast + west + southwest + Median_Income + condition_2 + condition_3 + condition_4 + condition_5 + condition_6 + condition_7 + condition_8, data = merged_data)
+
+summary <- summary(model)
+summary
+
+#Creating a summary table
+
+#order of conditions from greatest effect to least effect: 8, 7, 6, 5, 3, 4, 2
+
+col1 <- c("Says vaccination is 'easy, quick, and painless'", 
+          "Says vaccination is 'reserved' and includes image of vial with their name on it", 
+          "Says friends and family will be 'healthier and safer'", 
+          "Says getting vaccinated is 'good for society'", 
+          "Highlights dangers of not getting vaccinated", 
+          "Shows map to nearest pharmacy", 
+          "Says vaccine is 'new and improved'")
+
+col2 <- c("0.086", "0.070", "0.068", "0.042", "0.026", "0.021", "0.00015")
+
+col3 <- rep("0.004", times = 7)
+
+col4 <- c(rep("<0.001", times = 6), "0.97")
+
+p.adjust(summary$coefficients[, "Pr(>|t|)"])
+
+col5 <- c(rep("<0.001", times = 6), "1.00")
+
+table <- bind_cols(col1, col2, col3, col4, col5)
+colnames(table) <- c("Condition", "Beta", "SE", "P-value", "Adjusted P-value")
+
+nrow(patient_data)
+
+kable(table, format = "html", caption = "Regression-estimated impact of each of our simulated megastudy's 7 intervention conditions on RSV vaccine uptake") %>%
+    kable_styling("striped", full_width = FALSE) %>%
+    column_spec(1, border_right = TRUE) %>%
+    footnote(general = "Adjusted R-squared = 0.0355\nBaseline Vaccination Rate = \nObservations = 199,164")
+
+```
+
+
+
+
+The above table shows the results of an OLS regression, which predicts whether a given participant received an RSV vaccination within one month blah. The table and analysis are based on _____.
+    
+    
