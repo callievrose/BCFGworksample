@@ -1,0 +1,202 @@
+---
+title: "BCFG work sample"
+output:
+  html_document: default
+  pdf_document: default
+date: '2024-02-16'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Loading relevant packages
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(scales)
+```
+
+
+```{r}
+
+#Loading the data
+patient_data <- read.csv("Patient_Vaccination_Status.csv")
+
+store_data <- read.csv("Store_Data.csv")
+
+#Checking what values are present for each control variable
+table(patient_data$age)
+table(patient_data$race)
+table(patient_data$ethnicity)
+table(patient_data$gender)
+
+#Creating indicators for the control variables and conditions in the patient data set
+patient_data <- patient_data %>%
+    mutate(african_american = ifelse(race == "African American", 1, 0)) %>%
+    mutate(asian = ifelse(race == "Asian", 1, 0)) %>%
+    mutate(other_race = ifelse(race == "" | race == "Other" | race == "Unknown", 1, 0)) %>%
+    #Note: including the "" responses in the Non-Hispanic category
+    mutate(hispanic = ifelse(ethnicity == "Hispanic", 1, 0)) %>%
+    mutate(male = ifelse(gender == 'Male', 1, 0)) %>%
+    mutate(other_gender = ifelse(gender == "" | gender == "Unknown", 1, 0)) %>%
+    mutate(condition_2 = ifelse(condition == 2, 1, 0)) %>%
+    mutate(condition_3 = ifelse(condition == 3, 1, 0)) %>%
+    mutate(condition_4 = ifelse(condition == 4, 1, 0)) %>%
+    mutate(condition_5 = ifelse(condition == 5, 1, 0)) %>%
+    mutate(condition_6 = ifelse(condition == 6, 1, 0)) %>%
+    mutate(condition_7 = ifelse(condition == 7, 1, 0)) %>%
+    mutate(condition_8 = ifelse(condition == 8, 1, 0))
+    
+
+#Merging the patient and store data sets
+merged_data <- merge(patient_data, store_data, by.x = "store_id", by.y = "Store_ID")
+
+#Creating indicator variable for pharmacy region control
+table(merged_data$Region)
+
+merged_data <- merged_data %>%
+    mutate(midwest = ifelse(Region == "Midwest", 1, 0)) %>%
+    mutate(southeast = ifelse(Region == "Southeast", 1, 0)) %>%
+    mutate(west = ifelse(Region == "West", 1, 0)) %>%
+    mutate(southwest = ifelse(Region == "Southwest", 1, 0))
+    
+```
+```{r results='asis'}
+#Running the regression!
+model <- lm(vaccination_status ~ age + african_american + asian + other_race + hispanic + male + other_gender + midwest + southeast + west + southwest + Median_Income + condition_2 + condition_3 + condition_4 + condition_5 + condition_6 + condition_7 + condition_8, data = merged_data)
+
+summary <- summary(model)
+summary
+
+
+#Calculating baseline vaccination rate
+control <- merged_data %>% filter(condition == 1)
+mean(control$vaccination_status, na.rm = TRUE)
+
+#Sanity check: is condition 2 % close to control %? It should be, because there is not a significant effect for condition 2
+control <- merged_data %>% filter(condition == 2)
+mean(control$vaccination_status, na.rm = TRUE)
+    #Yes, it's close!
+
+
+#Creating a summary table
+
+#Note: order of conditions from greatest effect to least effect: 8, 7, 6, 5, 3, 4, 2
+
+#Condition column
+col1 <- c("Says vaccination is 'easy, quick, and painless'", 
+          "Says vaccination is 'reserved' and includes image of vial with their name on it", 
+          "Says friends and family will be 'healthier and safer'", 
+          "Says getting vaccinated is 'good for society'", 
+          "Highlights dangers of not getting vaccinated", 
+          "Shows map to nearest pharmacy", 
+          "Says vaccine is 'new and improved'",
+          "Adjusted R-squared", 
+          "Baseline Vaccination Rate (control condition)",
+          "Observation")
+
+#Beta column
+nrow(patient_data)
+col2 <- c("0.086", "0.070", "0.068", "0.042", "0.026", "0.021", "0.00014", "0.0355", "32.7%", "199,164")
+
+#SE column
+col3 <- c(rep("0.004", times = 7), "", "", "")
+
+#P-val column
+col4 <- c(rep("<0.001", times = 6), "0.97", "", "", "")
+
+#Adjusted P-val column
+p.adjust(summary$coefficients[, "Pr(>|t|)"])
+col5 <- c(rep("<0.001", times = 6), "1.00", "", "", "")
+
+#Joining columns into table
+table <- bind_cols(col1, col2, col3, col4, col5)
+colnames(table) <- c("Condition", "Beta", "SE", "P-value", "Adjusted P-value")
+
+
+#Making table
+kable(table, format = "html", caption = "Regression-estimated impact of each of our simulated megastudy's 7 intervention conditions on RSV vaccine uptake") %>%
+    kable_styling("striped", full_width = FALSE) %>%
+    column_spec(1, border_right = TRUE) %>%
+    row_spec(c(0,7), extra_css = "border-bottom: 1px solid;") %>% 
+    footnote(general = "The above table shows the results of an OLS regression, which predicts whether a given participant received an RSV vaccination within one month of the patients receiving the intervention. The primary predictors were the 7 indicators representing our experimental conditions, with the reference group being the business-as-usual control condition. Our control variables included age, gender (indicator for male; female omitted), race (indicators for African American, Asian, Other/Unknown; white omitted), ethnicity (indicator for Hispanic; Non-Hispanic omitted), pharmacy region (indicators for Midwest, Southeast, West, Southwest; Northeast omitted), and median household income of the county in which the pharmacy is located. We used the Benjamini-Hochberg method to calculate the adjusted P-values, accounting for multiple comparisons.") 
+
+
+```
+
+
+```{r results='asis'}
+
+#Creating a function to get patient characteristics data for each condition
+demographics_function <- function(condition_data){
+    c(format(nrow(condition_data), big.mark = ","),
+      round(mean(condition_data$age, na.rm = TRUE), 2),
+      percent(
+          c(sum(condition_data$gender == "Male"),
+            sum(condition_data$gender == "Female"),
+            sum(condition_data$gender == "" | condition_data$gender == "Unknown"), 
+            sum(condition_data$race == "African American"),
+            sum(condition_data$race == "Asian"),
+            sum(condition_data$race == "White"),
+            sum(condition_data$race == "" | condition_data$race == "Other" | condition_data$race == "Unknown"),
+            sum(condition_data$ethnicity == "Hispanic"),
+            sum(condition_data$ethnicity == "Non-Hispanic"),
+            sum(condition_data$Region == "Midwest"),
+            sum(condition_data$Region == "Southeast"),
+            sum(condition_data$Region == "West"),
+            sum(condition_data$Region == "Southwest")
+            )/nrow(condition_data)
+          , accuracy = .1
+      ),
+      round(mean(condition_data$Median_Income, na.rm = TRUE), 2)
+    )
+}
+
+
+#Creating dataframe for participant characteristic table
+characteristics <- as.data.frame(rbind(
+    c("All participants", demographics_function(merged_data)), 
+    c("Business as usual text", demographics_function(merged_data %>% filter(condition == 1))), 
+    c("Says vaccine is 'new and improved'", demographics_function(merged_data %>% filter(condition == 2))), 
+    c("Highlights dangers of not getting vaccinated", demographics_function(merged_data %>% filter(condition == 3))), 
+    c("Shows map to nearest pharmacy", demographics_function(merged_data %>% filter(condition == 4))), 
+    c("Says getting vaccinated is 'good for society'", demographics_function(merged_data %>% filter(condition == 5))), 
+    c("Says friends and family will be 'healthier and safer'", demographics_function(merged_data %>% filter(condition == 6))), 
+    c("Says vaccination is 'reserved'", demographics_function(merged_data %>% filter(condition == 7))), 
+    c("Says vaccination is 'easy, quick, and painless'", demographics_function(merged_data %>% filter(condition == 8)))
+))
+
+colnames(characteristics) <- c("Condition", "N", "Average Age", "Male", "Female", "Other / Unknown Gender", "African American", "Asian", "White", "Other / Unknown Race", "Hispanic", "Non-Hispanic / Unspecified", "Midwest", "Southeast", "West", "Southwest", "Median income of pharmacy county")
+
+#Flipping table so that everything can fit...
+flipped_characteristics <- t(characteristics)
+
+#Making table
+kable(flipped_characteristics, format = "html", caption = "Participant characteristics by condition") %>%
+    kable_styling("striped", bootstrap_options = "condensed") %>%
+    column_spec(c(1), extra_css = "border-right: 2px solid;") %>%
+    row_spec(c(2, 3, 6, 10, 12, 16), extra_css = "border-bottom: 1px solid;") %>%
+    row_spec(1:17, extra_css = "margin-bottom: -0.7em; padding: 2px;") %>%
+    row_spec(1, extra_css = "border-bottom: 2px solid;") %>%
+    footnote(general = "This table summarizes patient characteristics for participants overall and within each experimental condition and control group.") 
+
+#Old table (flipped)
+#kable(characteristics, format = "html", caption = "Participant characteristics by condition") %>%
+#    kable_styling("striped", full_width = FALSE) %>%
+#    column_spec(c(1), extra_css = "border-right: 2px solid;") %>%
+#    column_spec(c(2, 3, 6, 10, 12, 16), border_right = TRUE) %>%
+#    row_spec(c(0, 1), extra_css = "border-bottom: 1px solid;") %>% 
+#    footnote(general = "This table summarizes patient characteristics for participants overall and within each experimental condition and control group.") 
+
+```
+
+    
+**Methods and Results**
+
+To test the effects of our seven interventions, we ran an ordinary least squares regression (OLS) regression to predict whether a participant received an RSV vaccination. The primary predictors were the 7 indicators representing our experimental conditions, with the reference group being the business-as-usual control condition. Our control variables included age, gender (indicator for male; female omitted), race (indicators for African American, Asian, Other/Unknown; white omitted), ethnicity (indicator for Hispanic; Non-Hispanic omitted), pharmacy region (indicators for Midwest, Southeast, West, Southwest; Northeast omitted), and median household income of the county in which the pharmacy is located. 
+
+
+Through our analysis, we found that 6 of the 7 primary predictors led to a significant increase in vaccination rates when compared to our control condition. Some conditions, however, were more effective than others. The condition stating that the vaccination would be "quick, easy, and painless" had the greatest effect, leading to an 8.6% increase in vaccination rates (a 26% increase in comparison to the control condition). Of the effective conditions, the least effective was the text showing a map to the nearest pharmacy, which still led to a 2.1% increase. The only condition that did not have a significant effect was the message stating that the vaccine was "new and improved.”
+
+From this analysis, we can conclude that sending behaviorally informed, text-based nudges to patients can greatly improve vaccination rates. One possible explanation for why the top two performing nudges had the greatest effects is that people have a psychological bias toward doing things that are easy and convenient—the first nudge directly states that the vaccination process is "easy, quick, and painless," while the second nudge states that vaccine is "reserved" for the patient, implying that the process would be easy upon arriving at the pharmacy.
+
