@@ -178,7 +178,7 @@ kable(flipped_characteristics, format = "html", caption = "Participant character
     row_spec(c(2, 3, 6, 10, 12, 16), extra_css = "border-bottom: 1px solid;") %>%
     row_spec(1:17, extra_css = "margin-bottom: -0.7em; padding: 2px;") %>%
     row_spec(1, extra_css = "border-bottom: 2px solid;") %>%
-    footnote(general = "This table summarizes patient characteristics for participants overall and within each experimental condition and control group.") 
+    footnote(general = "This table summarizes patient characteristics for participants overall, within the control group, and within each experimental condition.") 
 
 #Old table (flipped)
 #kable(characteristics, format = "html", caption = "Participant characteristics by condition") %>%
@@ -186,7 +186,7 @@ kable(flipped_characteristics, format = "html", caption = "Participant character
 #    column_spec(c(1), extra_css = "border-right: 2px solid;") %>%
 #    column_spec(c(2, 3, 6, 10, 12, 16), border_right = TRUE) %>%
 #    row_spec(c(0, 1), extra_css = "border-bottom: 1px solid;") %>% 
-#    footnote(general = "This table summarizes patient characteristics for participants overall and within each experimental condition and control group.") 
+#    footnote(general = "This table summarizes patient characteristics for participants overall, within the control group, and within each experimental condition.") 
 
 ```
 
